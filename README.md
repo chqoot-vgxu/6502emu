@@ -12,21 +12,13 @@ Why not?
 ## Status
 I didn't test this on anything but an atmega32p.
 
-All but 12 instructions are implemented.
+All but 4 instructions are implemented.
 
 Interrupts not implemented yet.
 
 BCD mode not implemented and probably never will.
 
 The missing instructions are
- * ROL ZPG
- * ROL ZPG,X
- * ROL ANS
- * ROL ABS,X
- * ROR ZPG
- * ROR ZPG,X
- * ROR ANS
- * ROR ABS,X
  * BRK
  * BIT ZPG
  * BIT ABS
