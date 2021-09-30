@@ -1,6 +1,6 @@
 # 6502emu
 ## What it is
-A small 6502 emulator running inside an arduino
+A small 6502 emulator running inside an arduino.
 
 ## What it's not
 A drop in replacement for a real 6502 implemented in an arduino.

@@ -6,6 +6,7 @@
 #include <avr/io.h>
 
 #define ram ((uint8_t*)0)
+#define stack ((uint8_t*)0x1FF);
 
 /* BLINK
 main:   lda #$30
@@ -63,22 +64,27 @@ register uint8_t y   asm("r14");
 #define WORD(h, l) ((h << 8) | l)
 #define SET_IP(n) ip  = n
 #define INC_IP(n) ip += n
+#define SAVE_FLAG_REGISTER() f = SREG
+#define SET_FLAG(n)  f |=  (1 << n)
+#define CLR_FLAG(n)  f &= ~(1 << n)
+#define READ_FLAG(n) (f & (1 << n))
+#define STACK(sp) ram[0x100 + sp]
 
 void push(uint8_t reg) {
-    ram[0x100 + sp] = reg;
+    STACK(sp) = reg;
     sp--;
 }
 
 uint8_t pop() {
     sp++;
-    return ram[0x100 + sp];
+    return STACK(sp);
 }
 
-void set_f(int8_t reg) {
-    if (reg < 0) f |= (1 << SREG_N);
-    else f &= ~(1 << SREG_N);
-    if (reg == 0) f |= (1 << SREG_Z);
-    else f &= ~(1 << SREG_Z);
+void set_flags_on_load(int8_t reg) {
+    if (reg < 0) SET_FLAG(SREG_N);
+    else CLR_FLAG(SREG_N);
+    if (reg == 0) SET_FLAG(SREG_Z);
+    else CLR_FLAG(SREG_Z);
 }
 
 uint8_t immediate() {
@@ -121,7 +127,7 @@ uint16_t indirect_indexed() {
 
 int main() {
     ip = -1;
-    DDRB = 1 << PB5;
+    sp = 0xFF;
 
     for (;;) {
         uint8_t instruction = immediate();
@@ -132,56 +138,56 @@ int main() {
             case 0x69: { // ADC IMM
                 uint8_t t = immediate();
                 asm("adc %0, %1" : "=r"(a) : "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x65: { // ADC ZPG
                 uint8_t t = ram[zero_page()];
                 asm("adc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x75: { // ADC ZPG,X
                 uint8_t t = ram[zero_page_indexed(x)];
                 asm("adc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x6D: { // ADC ABS
                 uint8_t t = ram[absolute()];
                 asm("adc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x7D: { // ADC ABS,X
                 uint8_t t = ram[absolute_indexed(x)];
                 asm("adc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x79: { // ADC ABS,Y
                 uint8_t t = ram[absolute_indexed(y)];
                 asm("adc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x61: { // ADC (IMM,X)
                 uint8_t t = ram[indexed_indirect()];
                 asm("adc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x71: { // ADC (IMM),Y
                 uint8_t t = ram[indirect_indexed()];
                 asm("adc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
@@ -189,273 +195,273 @@ int main() {
             case 0xE9: { // SBC IMM
                 uint8_t t = immediate();
                 asm("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xE5: { // SBC ZPG
                 uint8_t t = ram[zero_page()];
                 asm("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF5: { // SBC ZPG,X
                 uint8_t t = ram[zero_page_indexed(x)];
                 asm ("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xED: { // SBC ABS
                 uint8_t t = ram[absolute()];
                 asm("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xFD: { // SBC ABS,X
                 uint8_t t = ram[absolute_indexed(x)];
                 asm("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF9: { // SBC ABS,Y
                 uint8_t t = ram[absolute_indexed(y)];
                 asm("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xE1: { // SBC (IMM,X)
                 uint8_t t = ram[indexed_indirect()];
                 asm("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF1: { // SBC (IMM),Y
                 uint8_t t = ram[indirect_indexed()];
                 asm("sbc %0, %1" :: "r"(a), "r"(t) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x29: { // AND IMM
                 a &= immediate();
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x25: { // AND ZPG
                 a &= ram[zero_page()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x35: { // AND ZPG,X
                 a &= ram[zero_page_indexed(x)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x2D: { // AND ABS
                 a &= ram[absolute()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x3D: { // AND ABS,X
                 a &= ram[absolute_indexed(x)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x39: { // AND ABS,Y
                 a &= ram[absolute_indexed(y)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x21: { // AND (IMM,X)
                 a &= ram[indexed_indirect()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x31: { // AND (IMM),Y
                 a &= ram[indirect_indexed()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x09: { // ORA IMM
                 a |= immediate();
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x05: { // ORA ZPG
                 a |= ram[zero_page()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x15: { // ORA ZPG,X
                 a |= ram[zero_page_indexed(x)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x0D: { // ORA ABS
                 a |= ram[absolute()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x1D: { // ORA ABS,X
                 a |= ram[absolute_indexed(x)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x19: { // ORA ABS,Y
                 uint8_t t = ram[absolute_indexed(y)];
                 a |= t;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x01: { // ORA (IMM,X)
                 a |= ram[indexed_indirect()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x11: { // ORA (IMM),Y
                 a |= ram[indirect_indexed()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x49: { // EOR IMM
                 a ^= immediate();
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x45: { // EOR ZPG
                 a ^= ram[zero_page()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x55: { // EOR ZPG,X
                 a ^= ram[zero_page_indexed(x)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x4D: { // EOR ABS
                 a ^= ram[absolute()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x5D: { // EOR ABS,X
                 a ^= ram[absolute_indexed(x)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x59: { // EOR ABS,Y
                 a ^= ram[absolute_indexed(y)];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x41: { // EOR (IMM,X)
                 a ^= ram[indexed_indirect()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x51: { // EOR (IMM),Y
                 a ^= ram[indirect_indexed()];
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x0A: { // ASL A
                 a <<= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x06: { // ASL ZPG
                 ram[zero_page()] <<= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x16: { // ASL ZPG,X
                 ram[zero_page_indexed(x)] <<= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x0E: { // ASL ABS
                 ram[absolute()] <<= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x1E: { // ASL ABS,X
                 ram[absolute_indexed(x)] <<= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x4A: { // LSR A
                 a >>= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x46: { // LSR ZPG
                 ram[zero_page()] >>= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x56: { // LSR ZPG,X
                 ram[zero_page_indexed(x)] >>= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x4E: { // LSR ABS
                 ram[absolute()] >>= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x5E: { // LSR ABS,X
                 ram[absolute_indexed(x)] >>= 1;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x2A: { // ROL A
                 asm("rol %0" :: "r"(a) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
@@ -478,7 +484,7 @@ int main() {
 
             case 0x6A: { // ROR A
                 asm("ror %0" :: "r"(a) : "cc");
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
@@ -510,7 +516,7 @@ int main() {
 
             case 0x10: { // BPL
                 int8_t o = immediate();
-                if (!(f & (1 << SREG_N))) {
+                if (!READ_FLAG(SREG_N)) {
                     INC_IP(o);
                 }
                 break;
@@ -518,7 +524,7 @@ int main() {
 
             case 0x30: { // BMI
                 int8_t o = immediate();
-                if (f & (1 << SREG_N)) {
+                if (READ_FLAG(SREG_N)) {
                     INC_IP(o);
                 }
                 break;
@@ -526,7 +532,7 @@ int main() {
 
             case 0x50: { // BVC
                 int8_t o = immediate();
-                if (!(f & (1 << SREG_V))) {
+                if (!READ_FLAG(SREG_V)) {
                     INC_IP(o);
                 }
                 break;
@@ -534,7 +540,7 @@ int main() {
 
             case 0x70: { // BVS
                 int8_t o = immediate();
-                if (f & (1 << SREG_V)) {
+                if (READ_FLAG(SREG_V)) {
                     INC_IP(o);
                 }
                 break;
@@ -542,7 +548,7 @@ int main() {
 
             case 0x90: { // BCC
                 int8_t o = immediate();
-                if (!(f & (1 << SREG_C))) {
+                if (!READ_FLAG(SREG_C)) {
                     INC_IP(o);
                 }
                 break;
@@ -550,7 +556,7 @@ int main() {
 
             case 0xB0: { // BCS
                 int8_t o = immediate();
-                if (f & (1 << SREG_C)) {
+                if (READ_FLAG(SREG_C)) {
                     INC_IP(o);
                 }
                 break;
@@ -558,7 +564,7 @@ int main() {
 
             case 0xD0: { // BNE
                 int8_t o = immediate();
-                if (!(f & (1 << SREG_Z))) {
+                if (!READ_FLAG(SREG_Z)) {
                     INC_IP(o);
                 }
                 break;
@@ -566,7 +572,7 @@ int main() {
 
             case 0xF0: { // BEQ
                 int8_t o = immediate();
-                if (f & (1 << SREG_Z)) {
+                if (READ_FLAG(SREG_Z)) {
                     INC_IP(o);
                 }
                 break;
@@ -580,9 +586,9 @@ int main() {
             }
 
             case 0x6C: { // JMP IND
-                uint16_t dl = ram[absolute()];
-                uint16_t dh = ram[absolute()];
-                ip = WORD(dh, dl);
+                uint16_t addr = absolute();
+                ipl = ram[addr];
+                iph = ram[addr + 1];
                 break;
             }
 
@@ -598,9 +604,8 @@ int main() {
 
 
             case 0x60: { // RST
-                uint8_t ipl = pop();
-                uint8_t iph = pop();
-                ip = (iph << 8) + ipl;
+                ipl = pop();
+                iph = pop();
                 break;
             }
 
@@ -612,56 +617,56 @@ int main() {
             case 0xC9: { // CMP IMM
                 uint8_t v = immediate();
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xC5: { // CMP ZPG
                 uint8_t v = ram[zero_page()];
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD5: { // CMP ZPG,X
                 uint8_t v = ram[zero_page_indexed(x)];
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xCD: { // CMP ABS
                 uint8_t v = ram[absolute()];
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xDD: { // CMP ABS,X
                 uint8_t v = ram[absolute_indexed(x)];
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD9: { // CMP ABS,Y
                 uint8_t v = ram[absolute_indexed(y)];
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xC1: { // CMP (IMM,X)
                 uint8_t v = ram[indexed_indirect()];
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD1: { // CMP (IMM),Y
                 uint8_t v = ram[indirect_indexed()];
                 asm volatile ("cp %0, %1" :: "r" (a), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
@@ -669,21 +674,21 @@ int main() {
             case 0xE0: { // CPX IMM
                 uint8_t v = immediate();
                 asm volatile ("cp %0, %1" :: "r" (x), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xE4: { // CPX ZPG
                 uint8_t v = ram[zero_page()];
                 asm volatile ("cp %0, %1" :: "r" (x), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xEC: { // CPX ABS
                 uint8_t v = ram[absolute()];
                 asm volatile ("cp %0, %1" :: "r" (x), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
@@ -691,107 +696,107 @@ int main() {
             case 0xC0: { // CPX IMM
                 uint8_t v = immediate();
                 asm volatile ("cp %0, %1" :: "r" (y), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xC4: { // CPX ZPG
                 uint8_t v = ram[zero_page()];
                 asm volatile ("cp %0, %1" :: "r" (y), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xCC: { // CPX ABS
                 uint8_t v = ram[absolute()];
                 asm volatile ("cp %0, %1" :: "r" (y), "r" (v));
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0xC6: { // DEC ZPG
                 ram[zero_page()]--;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD6: { // DEC ZPG,X
                 ram[zero_page_indexed(x)]--;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xCE: { // DEC ABS
                 ram[absolute()]--;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xDE: { // DEC ABS,X
                 ram[absolute_indexed(x)]--;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0xE6: { // INC ZPG
                 ram[zero_page()]++;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF6: { // INC ZPG,X
                 ram[zero_page_indexed(x)]++;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xEE: { // INC ABS
                 ram[absolute()]++;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0xFE: { // INC ABS,X
                 ram[absolute_indexed(x)]++;
-                f = SREG;
+                SAVE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x18: { // CLC
-                f &= ~(1 << SREG_C);
+                CLR_FLAG(SREG_C);
                 break;
             }
 
 
             case 0x38: { // SEC
-                f |= (1 << SREG_C);
+                SET_FLAG(SREG_C);
                 break;
             }
 
 
             case 0x58: { // CLI
-                f &= ~(1 << SREG_I);
+                CLR_FLAG(SREG_I);
                 break;
             }
 
 
             case 0x78: { // SEI
-                f |= (1 << SREG_I);
+                SET_FLAG(SREG_I);
                 break;
             }
 
 
             case 0xB8: { // CLV
-                f &= ~(1 << SREG_V);
+                CLR_FLAG(SREG_V);
                 break;
             }
 
 
             case 0xD8: { // CLD
-                f |= (1 << SREG_V);
+                SET_FLAG(SREG_V);
                 break;
             }
 
@@ -802,111 +807,111 @@ int main() {
 
             case 0xA9: { // LDA IMM
                 a = immediate();
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
             case 0xA5: { // LDA ZPG
                 a = ram[zero_page()];
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
             case 0xB5: { // LDA ZPG,X
                 a = ram[zero_page_indexed(x)];
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
             case 0xAD: { // LDA ABS
                 a = ram[absolute()];
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
             case 0xBD: { // LDA ABS,X
                 a = ram[absolute_indexed(x)];
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
             case 0xB9: { // LDA ABS,Y
                 a = ram[absolute_indexed(y)];
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
             case 0xA1: { // LDA (IMM,X)
                 a = ram[indexed_indirect()];
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
             case 0xB1: { // LDA (IMM),Y
                 a = ram[indirect_indexed()];
-                set_f(a);
+                set_flags_on_load(a);
                 break;
             }
 
 
             case 0xA2: { // LDX IMM
                 x = immediate();
-                set_f(x);
+                set_flags_on_load(x);
                 break;
             }
 
             case 0xA6: { // LDX ZPG
                 x = ram[zero_page()];
-                set_f(x);
+                set_flags_on_load(x);
                 break;
             }
 
             case 0xB6: { // LDX ZPG,Y
                 x = ram[zero_page_indexed(y)];
-                set_f(x);
+                set_flags_on_load(x);
                 break;
             }
 
             case 0xAE: { // LDX ABS
                 x = ram[absolute()];
-                set_f(x);
+                set_flags_on_load(x);
                 break;
             }
 
             case 0xBE: { // LDX ABS,Y
                 x = ram[absolute_indexed(y)];
-                set_f(x);
+                set_flags_on_load(x);
                 break;
             }
 
 
             case 0xA0: { // LDY IMM
-                x = immediate();
-                set_f(y);
+                y = immediate();
+                set_flags_on_load(y);
                 break;
             }
 
             case 0xA4: { // LDY ZPG
-                x = ram[zero_page()];
-                set_f(y);
+                y = ram[zero_page()];
+                set_flags_on_load(y);
                 break;
             }
 
             case 0xB4: { // LDY ZPG,X
-                x = ram[zero_page_indexed(x)];
-                set_f(y);
+                y = ram[zero_page_indexed(x)];
+                set_flags_on_load(y);
                 break;
             }
 
             case 0xAC: { // LDY ABS
-                x = ram[absolute()];
-                set_f(y);
+                y = ram[absolute()];
+                set_flags_on_load(y);
                 break;
             }
 
             case 0xBC: { // LDY ABS,X
-                x = ram[absolute_indexed(x)];
-                set_f(y);
+                y = ram[absolute_indexed(x)];
+                set_flags_on_load(y);
                 break;
             }
 
