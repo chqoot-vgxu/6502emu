@@ -74,6 +74,9 @@ register uint8_t y   asm("r14");
 #define ROL_(t)    asm("rol %0" : "+r"((t)) :: "cc");
 #define ROR_(t)    asm("ror %0" : "+r"((t)) :: "cc");
 #define CMP_(a, b) asm("cp %0, %1" :: "r" ((a)), "r" ((b)) : "cc");
+#define BIT_(t)    asm("mov __tmp_reg__, %0"       "\n\t"   \
+                       "and __tmp_reg__, %1"       "\n\t"   \
+                       :: "r"(t), "r"(a) : "cc");
 
 void push(uint8_t reg) {
     STACK(sp) = reg;
@@ -90,6 +93,11 @@ void set_flags_on_load(int8_t reg) {
     else CLR_FLAG(SREG_N);
     if (reg == 0) SET_FLAG(SREG_Z);
     else CLR_FLAG(SREG_Z);
+}
+
+void set_flags_on_bit(int8_t t) {
+    if (t & (1 << 6)) SET_FLAG(SREG_V);
+    else CLR_FLAG(SREG_V);
 }
 
 uint8_t immediate() {
@@ -141,13 +149,15 @@ int main() {
 
 
             case 0x69: { // ADC IMM
-                ADC_(immediate());
+                uint8_t t = immediate();
+                ADC_(t);
                 SAVE_FLAG_REGISTER();
                 break;
             }
 
             case 0x65: { // ADC ZPG
-                ADC_(ram[zero_page()]);
+                uint8_t t = ram[zero_page()];
+                ADC_(t);
                 SAVE_FLAG_REGISTER();
                 break;
             }
@@ -548,11 +558,19 @@ int main() {
 
 
             case 0x24: { // BIT ZPG
-                return 0x24;
+                uint8_t t = ram[zero_page()];
+                BIT_(t);
+                SAVE_FLAG_REGISTER();
+                set_flags_on_bit(t);
+                break;
             }
 
             case 0x2C: { // BIT ABS
-                return 0x2C;
+                uint8_t t = ram[absolute()];
+                BIT_(t);
+                SAVE_FLAG_REGISTER();
+                set_flags_on_bit(t);
+                break;
             }
 
 
@@ -636,10 +654,9 @@ int main() {
 
 
             case 0x20: { // JSR
-                size_t t = ip + 2;
-                push(t >> 8);
-                push(t & 0xFF);
                 uint16_t d = absolute();
+                push(iph);
+                push(ipl);
                 ip = d;
                 break;
             }

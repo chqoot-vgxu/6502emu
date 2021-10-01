@@ -10,9 +10,9 @@ The emulator itself gives almost complete control to the internal hardware, so i
 Why not?
 
 ## Status
-I didn't test this on anything but an atmega32p.
+I didn't test this on anything but an atmega328p.
 
-All but 4 instructions are implemented.
+All but 2 instructions are implemented.
 
 Interrupts not implemented yet.
 
@@ -20,8 +20,6 @@ BCD mode not implemented and probably never will.
 
 The missing instructions are
  * BRK
- * BIT ZPG
- * BIT ABS
  * SED
 
 Furthermore some things are practicaly impossible to emulate, for example the 6502 interrupt vector. At reset the 6502 would read the address where to start executing code from 0xFFFC-D, but the atmega328p doesn't have this much flash memory. So it starts executing from whenever the compiler places it. Same story for IRQ/BRK and NMI vectors.
