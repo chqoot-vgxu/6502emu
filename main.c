@@ -7,47 +7,98 @@
 #define ram ((uint8_t*)0)
 #define stack ((uint8_t*)0x1FF);
 
-/* BLINK
-main:   lda #$30
-        sta $24
-loop:   sta $23
-        lda #$FF
-        sta $0250
-        sta $0251
-        jsr delay
-        lda #$30
-        jmp loop
 
-delay:  lda $0250
-        bne label
-        lda $0251
-        beq zero
-        dec $0251
-label   dec $0250
-        jmp delay
-zero:   rts
-*/
 const PROGMEM uint8_t rom[] = {
-// main
-    0xA9, 0x30,
-    0x85, 0x24,
-    0x85, 0x23,
-    0xA9, 0xFF,
-    0x8D, 0x50, 0x02,
-    0x8D, 0x51, 0x02,
-    0x20, 0x15, 0x00,
-    0xA9, 0x30,
-    0x4C, 0x03, 0x00,
+// reset:   .word $0003
+    0x03, 0x00,
+// irq:     .word $0003
+    0x03, 0x00,
+
+// main:
+    0xA9, 0x10,         // lda #$10
+    0xA2, 0x00,         // ldx #$00  ; baud 115200
+    0x20, 0x39, 0x00,   // jsr uart_init
+    0xA9, 0x20,         // lda #$20  ; (1 << PB5)
+    0x85, 0x24,         // sta $24   ; DDRB
+// loop:
+    0x85, 0x23,         // sta $23   ; PINB
+    0xA9, 0x41,         // lda #$41  ; 'A'
+    0x20, 0x4A, 0x00,   // jsr uart_tx
+    0xA9, 0xFF,         // lda #$FF
+    0x8D, 0x50, 0x02,   // sta $0250 ; delay input low
+    0x8D, 0x51, 0x02,   // sta $0251 ; delay input high
+    0x20, 0x25, 0x00,   // jsr delay
+    0xA9, 0x20,         // lda #$20
+    0xB8,               // clv
+    0x50, 0xE9,         // bvc loop
+
 // delay
-    0xAD, 0x50, 0x02,
-    0xD0, 0x08,
-    0xAD, 0x51, 0x02,
-    0xF0, 0x09,
-    0xCE, 0x51, 0x02,
-    0xCE, 0x50, 0x02,
-    0x4C, 0x15, 0x00,
-    0x60,
+    0xAD, 0x50, 0x02,   // lda $0250
+    0xD0, 0x08,         // bne label
+    0xAD, 0x51, 0x02,   // lda $0251
+    0xF0, 0x09,         // beq zero
+    0xCE, 0x51, 0x02,   // dec $0251
+// label
+    0xCE, 0x50, 0x02,   // dec $0250
+    0xB8,               // clv
+    0x50, 0xED,         // bvc delay
+// zero
+    0x60,               // rts
+
+// uart_init:
+    0x85, 0xC4,         // sta $C4  ; UBRR0L
+    0x86, 0xC5,         // stx $C5  ; UBRR0H
+    0xA9, 0x02,         // lda #$02 ; (1 << U2X0)
+    0x85, 0xC0,         // sta $C0  ; UCSR0A
+    0xA9, 0x08,         // lda #$08 ; (1 << TXEN0)
+    0x85, 0xC1,         // sta $C1  ; UCSR0B
+    0xA9, 0x0E,         // lda #$0E ; (1 << USBS0) | (3 << UCSZ00)
+    0x85, 0xC2,         // sta $C2  ; UCSR0C
+    0x60,               // rts
+
+// uart_tx:
+    0x48,               // pha
+    0xA9, 0x20,         // lda #$20 ; (1 << UDRE0)
+    0x24, 0xC0,         // bit $C0  ; UCSR0A
+    0xF0, 0x05,         // beq uart_tx
+    0x68,               // pla
+    0x85, 0xC6,         // sta $C6  ; UDR0
+    0x60,               // rts
 };
+
+
+// // BLINK
+// const PROGMEM uint8_t rom[] = {
+// // reset
+//     0x03, 0x00,
+// // irq
+//     0x03, 0x00,
+// // main
+//     0xA9, 0x20,         // lda #$20
+//     0x85, 0x24,         // sta $24
+// // loop
+//     0x85, 0x23,         // sta $23
+//     0xA9, 0xFF,         // lda #$FF
+//     0x8D, 0x50, 0x02,   // sta $0250
+//     0x8D, 0x51, 0x02,   // sta $0251
+//     0x20, 0x19, 0x00,   // jsr delay
+//     0xA9, 0x20,         // lda #$20
+//     0xB8,               // clv
+//     0x50, 0xEE,         // bvc delay
+
+// // delay
+//     0xAD, 0x50, 0x02,   // lda $0250
+//     0xD0, 0x08,         // bne label
+//     0xAD, 0x51, 0x02,   // lda $0251
+//     0xF0, 0x09,         // beq zero
+//     0xCE, 0x51, 0x02,   // dec $0251
+// // label
+//     0xCE, 0x50, 0x02,   // dec $0250
+//     0xB8,               // clv
+//     0x50, 0xED,         // bvc delay
+// // zero
+//     0x60,               // rts
+// };
 
 
 register uint8_t sp  asm("r9");
@@ -68,6 +119,8 @@ register uint8_t y   asm("r14");
 #define CLR_FLAG(n)  f &= ~(1 << n)
 #define READ_FLAG(n) (f & (1 << n))
 #define STACK(sp) ram[0x100 + sp]
+#define RESET_VEC (rom)
+#define IRQ_VEC   (rom + 2)
 
 #define ADC_(t)    asm("adc %0, %1" : "+r"(a) : "r"((t)) : "cc")
 #define SBC_(t)    asm("sbc %0, %1" : "+r"(a) : "r"((t)) : "cc")
@@ -139,7 +192,7 @@ uint16_t indirect_indexed() {
 
 
 int main() {
-    ip = -1;
+    ip = pgm_read_word(RESET_VEC);
     sp = 0xFF;
 
     for (;;) {
@@ -662,12 +715,19 @@ int main() {
             }
 
 
-            case 0x60: { // RST
+            case 0x60: { // RTS
                 ipl = pop();
                 iph = pop();
                 break;
             }
 
+            case 0x40: { // RTI
+                f = pop();
+                ipl = pop();
+                iph = pop();
+                sei();
+                break;
+            }
 
             case 0x00: // BRK
                 return 0x00;
@@ -854,10 +914,8 @@ int main() {
             }
 
 
-            case 0xD8: { // CLD
-                SET_FLAG(SREG_V);
-                break;
-            }
+            case 0xD8:  // CLD
+                return 0xD8;
 
 
             case 0xF8: // SED
@@ -1039,6 +1097,47 @@ int main() {
 
             case 0x8C: { // STY ABS
                 ram[absolute()] = y;
+                break;
+            }
+
+
+            case 0xAA: { // TAX
+                x = a;
+                break;
+            }
+
+            case 0x8A: { // TXA
+                a = x;
+                break;
+            }
+
+            case 0xCA: { // DEX
+                x--;
+                break;
+            }
+
+            case 0xE8: { // INX
+                x++;
+                break;
+            }
+
+            case 0xA8: { // TAY
+                y = a;
+                break;
+            }
+
+            case 0x98: { // TYA
+                a = y;
+                break;
+            }
+
+            case 0x88: { // DEY
+                y--;
+                break;
+            }
+
+            case 0xC8: { // INY
+                y++;
                 break;
             }
 
