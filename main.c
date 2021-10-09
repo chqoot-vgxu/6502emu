@@ -9,28 +9,33 @@
 
 
 const PROGMEM uint8_t rom[] = {
-// reset:   .word $0003
-    0x03, 0x00,
-// irq:     .word $0003
-    0x03, 0x00,
+// reset:   .word $0503
+    0x03, 0x05,
+// irq:     .word $0503
+    0x03, 0x05,
 
 // main:
     0xA9, 0x10,         // lda #$10
     0xA2, 0x00,         // ldx #$00  ; baud 115200
-    0x20, 0x39, 0x00,   // jsr uart_init
+    0x20, 0x41, 0x05,   // jsr uart_init
     0xA9, 0x20,         // lda #$20  ; (1 << PB5)
     0x85, 0x24,         // sta $24   ; DDRB
 // loop:
+    0xA9, 0x20,         // lda #$20
     0x85, 0x23,         // sta $23   ; PINB
-    0xA9, 0x41,         // lda #$41  ; 'A'
-    0x20, 0x4A, 0x00,   // jsr uart_tx
+    0xA0, 0x00,         // ldy #$00
+// tx_next:
+    0xB9, 0x5E, 0x05,   // lda hello_world,y
+    0x20, 0x52, 0x05,   // jsr uart_tx
+    0xC8,               // iny
+    0xC0, 0x0E,         // cpy #$14
+    0xD0, 0xF5,         // bne tx_next
     0xA9, 0xFF,         // lda #$FF
     0x8D, 0x50, 0x02,   // sta $0250 ; delay input low
     0x8D, 0x51, 0x02,   // sta $0251 ; delay input high
-    0x20, 0x25, 0x00,   // jsr delay
-    0xA9, 0x20,         // lda #$20
+    0x20, 0x2D, 0x05,   // jsr delay
     0xB8,               // clv
-    0x50, 0xE9,         // bvc loop
+    0x50, 0xE1,         // bvc loop
 
 // delay
     0xAD, 0x50, 0x02,   // lda $0250
@@ -58,21 +63,25 @@ const PROGMEM uint8_t rom[] = {
 
 // uart_tx:
     0x48,               // pha
+// wait
     0xA9, 0x20,         // lda #$20 ; (1 << UDRE0)
     0x24, 0xC0,         // bit $C0  ; UCSR0A
-    0xF0, 0x05,         // beq uart_tx
+    0xF0, 0xFA,         // beq wait
     0x68,               // pla
     0x85, 0xC6,         // sta $C6  ; UDR0
     0x60,               // rts
+
+// hello_world: .string "Hello, world!\n"
+    'H', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', '!', '\n', '\0'
 };
 
 
 // // BLINK
 // const PROGMEM uint8_t rom[] = {
 // // reset
-//     0x03, 0x00,
+//     0x03, 0x05,
 // // irq
-//     0x03, 0x00,
+//     0x03, 0x05,
 // // main
 //     0xA9, 0x20,         // lda #$20
 //     0x85, 0x24,         // sta $24
@@ -81,7 +90,7 @@ const PROGMEM uint8_t rom[] = {
 //     0xA9, 0xFF,         // lda #$FF
 //     0x8D, 0x50, 0x02,   // sta $0250
 //     0x8D, 0x51, 0x02,   // sta $0251
-//     0x20, 0x19, 0x00,   // jsr delay
+//     0x20, 0x19, 0x05,   // jsr delay
 //     0xA9, 0x20,         // lda #$20
 //     0xB8,               // clv
 //     0x50, 0xEE,         // bvc delay
@@ -111,25 +120,35 @@ register uint8_t x   asm("r15");
 register uint8_t y   asm("r14");
 
 
-#define WORD(h, l) ((h << 8) | l)
-#define SET_IP(n) ip  = n
-#define INC_IP(n) ip += n
-#define SAVE_FLAG_REGISTER() f = SREG
-#define SET_FLAG(n)  f |=  (1 << n)
-#define CLR_FLAG(n)  f &= ~(1 << n)
-#define READ_FLAG(n) (f & (1 << n))
-#define STACK(sp) ram[0x100 + sp]
-#define RESET_VEC (rom)
-#define IRQ_VEC   (rom + 2)
+#define WORD(h, l) (uint16_t)(((h) << 8) | (l))
+#define SET_IP(n) ip  = (n)
+#define INC_IP(n) ip += (n)
+#define UPDATE_FLAG_REGISTER() f = SREG
+#define SET_FLAG(n)  f |=  (1 << (n))
+#define CLR_FLAG(n)  f &= ~(1 << (n))
+#define READ_FLAG(n) (f & (1 << (n)))
+#define STACK(sp) ram[0x100 + (sp)]
+#define RESET_VEC (0x0500u)
+#define IRQ_VEC   (0x0502u)
 
 #define ADC_(t)    asm("adc %0, %1" : "+r"(a) : "r"((t)) : "cc")
 #define SBC_(t)    asm("sbc %0, %1" : "+r"(a) : "r"((t)) : "cc")
-#define ROL_(t)    asm("rol %0" : "+r"((t)) :: "cc");
-#define ROR_(t)    asm("ror %0" : "+r"((t)) :: "cc");
-#define CMP_(a, b) asm("cp %0, %1" :: "r" ((a)), "r" ((b)) : "cc");
+#define ROL_(t)    asm("rol %0" : "+r"((t)) :: "cc")
+#define ROR_(t)    asm("ror %0" : "+r"((t)) :: "cc")
+#define CMP_(a, b) asm("cp %0, %1" :: "r" ((a)), "r" ((b)) : "cc")
 #define BIT_(t)    asm("mov __tmp_reg__, %0"       "\n\t"   \
                        "and __tmp_reg__, %1"       "\n\t"   \
-                       :: "r"(t), "r"(a) : "cc");
+                       :: "r"(t), "r"(a) : "cc")
+
+uint8_t memory_read(uint16_t addr) {
+    return (addr < 0x0500u ? ram[addr] : pgm_read_byte(rom + (addr - 0x0500u)));
+}
+
+void memory_write(uint16_t addr, uint8_t v) {
+    if (addr < 0x0500u) {
+        ram[addr] = v;
+    }
+}
 
 void push(uint8_t reg) {
     STACK(sp) = reg;
@@ -149,13 +168,14 @@ void set_flags_on_load(int8_t reg) {
 }
 
 void set_flags_on_bit(int8_t t) {
+    UPDATE_FLAG_REGISTER();
     if (t & (1 << 6)) SET_FLAG(SREG_V);
     else CLR_FLAG(SREG_V);
 }
 
 uint8_t immediate() {
     INC_IP(1);
-    return pgm_read_byte(rom + ip);
+    return memory_read(ip);
 }
 
 uint16_t zero_page() {
@@ -178,21 +198,21 @@ uint16_t absolute_indexed(uint8_t reg) {
 
 uint16_t indexed_indirect() {
     uint8_t z = immediate() + x;
-    uint8_t l = ram[z];
-    uint8_t h = ram[z+1];
-    return ram[WORD(h, l)];
+    uint16_t i = WORD(ram[z+1], ram[z]);
+    return WORD(memory_read(i+1), memory_read(i));
 }
 
 uint16_t indirect_indexed() {
     uint8_t z = immediate();
     uint8_t l = ram[z];
     uint8_t h = ram[z+1];
-    return ram[WORD(h, l) + y];
+    return memory_read(WORD(h, l) + y);
 }
 
 
 int main() {
-    ip = pgm_read_word(RESET_VEC);
+    ipl = memory_read(RESET_VEC);
+    iph = memory_read(RESET_VEC + 1);
     sp = 0xFF;
 
     for (;;) {
@@ -204,55 +224,63 @@ int main() {
             case 0x69: { // ADC IMM
                 uint8_t t = immediate();
                 ADC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x65: { // ADC ZPG
-                uint8_t t = ram[zero_page()];
+                uint16_t addr = zero_page();
+                uint8_t t = ram[addr];
                 ADC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x75: { // ADC ZPG,X
-                ADC_(ram[zero_page_indexed(x)]);
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = zero_page_indexed(x);
+                uint8_t t = ram[addr];
+                ADC_(t);
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x6D: { // ADC ABS
-                uint8_t t = ram[absolute()];
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
                 ADC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x7D: { // ADC ABS,X
-                uint8_t t = ram[absolute_indexed(x)];
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
                 ADC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x79: { // ADC ABS,Y
-                uint8_t t = ram[absolute_indexed(y)];
+                uint16_t addr = absolute_indexed(y);
+                uint8_t t = memory_read(addr);
                 ADC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x61: { // ADC (IMM,X)
-                uint8_t t = ram[indexed_indirect()];
+                uint16_t addr = indexed_indirect();
+                uint8_t t = memory_read(addr);
                 ADC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x71: { // ADC (IMM),Y
-                uint8_t t = ram[indirect_indexed()];
+                uint16_t addr = indirect_indexed();
+                uint8_t t = memory_read(addr);
                 ADC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
@@ -260,273 +288,311 @@ int main() {
             case 0xE9: { // SBC IMM
                 uint8_t t = immediate();
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xE5: { // SBC ZPG
                 uint8_t t = ram[zero_page()];
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF5: { // SBC ZPG,X
                 uint8_t t = ram[zero_page_indexed(x)];
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xED: { // SBC ABS
-                uint8_t t = ram[absolute()];
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xFD: { // SBC ABS,X
-                uint8_t t = ram[absolute_indexed(x)];
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF9: { // SBC ABS,Y
-                uint8_t t = ram[absolute_indexed(y)];
+                uint16_t addr = absolute_indexed(y);
+                uint8_t t = memory_read(addr);
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xE1: { // SBC (IMM,X)
-                uint8_t t = ram[indexed_indirect()];
+                uint16_t addr = indexed_indirect();
+                uint8_t t = memory_read(addr);
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF1: { // SBC (IMM),Y
-                uint8_t t = ram[indirect_indexed()];
+                uint16_t addr = indirect_indexed();
+                uint8_t t = memory_read(addr);
                 SBC_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x29: { // AND IMM
                 a &= immediate();
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x25: { // AND ZPG
                 a &= ram[zero_page()];
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x35: { // AND ZPG,X
                 a &= ram[zero_page_indexed(x)];
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x2D: { // AND ABS
-                a &= ram[absolute()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
+                a &= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x3D: { // AND ABS,X
-                a &= ram[absolute_indexed(x)];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
+                a &= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x39: { // AND ABS,Y
-                a &= ram[absolute_indexed(y)];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(y);
+                uint8_t t = memory_read(addr);
+                a &= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x21: { // AND (IMM,X)
-                a &= ram[indexed_indirect()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = indexed_indirect();
+                uint8_t t = memory_read(addr);
+                a &= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x31: { // AND (IMM),Y
-                a &= ram[indirect_indexed()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = indirect_indexed();
+                uint8_t t = memory_read(addr);
+                a &= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x09: { // ORA IMM
                 a |= immediate();
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x05: { // ORA ZPG
                 a |= ram[zero_page()];
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x15: { // ORA ZPG,X
                 a |= ram[zero_page_indexed(x)];
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x0D: { // ORA ABS
-                a |= ram[absolute()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
+                a |= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x1D: { // ORA ABS,X
-                a |= ram[absolute_indexed(x)];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
+                a |= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x19: { // ORA ABS,Y
-                uint8_t t = ram[absolute_indexed(y)];
+                uint16_t addr = absolute_indexed(y);
+                uint8_t t = memory_read(addr);
                 a |= t;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x01: { // ORA (IMM,X)
-                a |= ram[indexed_indirect()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = indexed_indirect();
+                uint8_t t = memory_read(addr);
+                a |= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x11: { // ORA (IMM),Y
-                a |= ram[indirect_indexed()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = indirect_indexed();
+                uint8_t t = memory_read(addr);
+                a |= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x49: { // EOR IMM
                 a ^= immediate();
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x45: { // EOR ZPG
                 a ^= ram[zero_page()];
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x55: { // EOR ZPG,X
                 a ^= ram[zero_page_indexed(x)];
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x4D: { // EOR ABS
-                a ^= ram[absolute()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
+                a ^= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x5D: { // EOR ABS,X
-                a ^= ram[absolute_indexed(x)];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
+                a ^= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x59: { // EOR ABS,Y
-                a ^= ram[absolute_indexed(y)];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(y);
+                uint8_t t = memory_read(addr);
+                a ^= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x41: { // EOR (IMM,X)
-                a ^= ram[indexed_indirect()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = indexed_indirect();
+                uint8_t t = memory_read(addr);
+                a ^= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x51: { // EOR (IMM),Y
-                a ^= ram[indirect_indexed()];
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = indirect_indexed();
+                uint8_t t = memory_read(addr);
+                a ^= t;
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x0A: { // ASL A
                 a <<= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x06: { // ASL ZPG
                 ram[zero_page()] <<= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x16: { // ASL ZPG,X
                 ram[zero_page_indexed(x)] <<= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x0E: { // ASL ABS
                 ram[absolute()] <<= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x1E: { // ASL ABS,X
                 ram[absolute_indexed(x)] <<= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x4A: { // LSR A
                 a >>= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x46: { // LSR ZPG
                 ram[zero_page()] >>= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x56: { // LSR ZPG,X
                 ram[zero_page_indexed(x)] >>= 1;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x4E: { // LSR ABS
-                ram[absolute()] >>= 1;
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
+                memory_write(addr, t >> 1);
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0x5E: { // LSR ABS,X
-                ram[absolute_indexed(x)] >>= 1;
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
+                memory_write(addr, t >> 1);
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0x2A: { // ROL A
                 ROL_(a);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
@@ -534,7 +600,7 @@ int main() {
                 uint16_t addr = zero_page();
                 uint8_t t = ram[addr];
                 ROL_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 ram[addr] = t;
                 break;
             }
@@ -543,33 +609,33 @@ int main() {
                 uint16_t addr = zero_page_indexed(x);
                 uint8_t t = ram[addr];
                 ROL_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 ram[addr] = t;
                 break;
             }
 
             case 0x2E: { // ROL ABS
                 uint16_t addr = absolute();
-                uint8_t t = ram[addr];
+                uint8_t t = memory_read(addr);
                 ROL_(t);
-                SAVE_FLAG_REGISTER();
-                ram[addr] = t;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
             case 0x3E: { // ROL ABS,X
                 uint16_t addr = absolute_indexed(x);
-                uint8_t t = ram[addr];
+                uint8_t t = memory_read(addr);
                 ROL_(t);
-                SAVE_FLAG_REGISTER();
-                ram[addr] = t;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
 
             case 0x6A: { // ROR A
                 ROR_(a);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
@@ -577,7 +643,7 @@ int main() {
                 uint16_t addr = zero_page();
                 uint8_t t = ram[addr];
                 ROR_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 ram[addr] = t;
                 break;
             }
@@ -586,7 +652,7 @@ int main() {
                 uint16_t addr = zero_page_indexed(x);
                 uint8_t t = ram[addr];
                 ROR_(t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 ram[addr] = t;
                 break;
             }
@@ -595,8 +661,8 @@ int main() {
                 uint16_t addr = absolute();
                 uint8_t t = ram[addr];
                 ROR_(t);
-                SAVE_FLAG_REGISTER();
-                ram[addr] = t;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
@@ -604,8 +670,8 @@ int main() {
                 uint16_t addr = absolute_indexed(x);
                 uint8_t t = ram[addr];
                 ROR_(t);
-                SAVE_FLAG_REGISTER();
-                ram[addr] = t;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
@@ -613,15 +679,13 @@ int main() {
             case 0x24: { // BIT ZPG
                 uint8_t t = ram[zero_page()];
                 BIT_(t);
-                SAVE_FLAG_REGISTER();
                 set_flags_on_bit(t);
                 break;
             }
 
             case 0x2C: { // BIT ABS
-                uint8_t t = ram[absolute()];
+                uint8_t t = memory_read(absolute());
                 BIT_(t);
-                SAVE_FLAG_REGISTER();
                 set_flags_on_bit(t);
                 break;
             }
@@ -700,8 +764,8 @@ int main() {
 
             case 0x6C: { // JMP IND
                 uint16_t addr = absolute();
-                ipl = ram[addr];
-                iph = ram[addr + 1];
+                ipl = memory_read(addr);
+                iph = memory_read(addr + 1);
                 break;
             }
 
@@ -736,56 +800,56 @@ int main() {
             case 0xC9: { // CMP IMM
                 uint8_t t = immediate();
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xC5: { // CMP ZPG
                 uint8_t t = ram[zero_page()];
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD5: { // CMP ZPG,X
                 uint8_t t = ram[zero_page_indexed(x)];
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xCD: { // CMP ABS
-                uint8_t t = ram[absolute()];
+                uint8_t t = memory_read(absolute());
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xDD: { // CMP ABS,X
-                uint8_t t = ram[absolute_indexed(x)];
+                uint8_t t = memory_read(absolute_indexed(x));
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD9: { // CMP ABS,Y
-                uint8_t t = ram[absolute_indexed(y)];
+                uint8_t t = memory_read(absolute_indexed(y));
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xC1: { // CMP (IMM,X)
-                uint8_t t = ram[indexed_indirect()];
+                uint8_t t = memory_read(indexed_indirect());
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD1: { // CMP (IMM),Y
-                uint8_t t = ram[indirect_indexed()];
+                uint8_t t = memory_read(indirect_indexed());
                 CMP_(a, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
@@ -793,21 +857,21 @@ int main() {
             case 0xE0: { // CPX IMM
                 uint8_t t = immediate();
                 CMP_(x, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xE4: { // CPX ZPG
                 uint8_t t = ram[zero_page()];
                 CMP_(x, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xEC: { // CPX ABS
-                uint8_t t = ram[absolute()];
+                uint8_t t = memory_read(absolute());
                 CMP_(x, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
@@ -815,71 +879,83 @@ int main() {
             case 0xC0: { // CPY IMM
                 uint8_t t = immediate();
                 CMP_(y, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xC4: { // CPY ZPG
                 uint8_t t = ram[zero_page()];
                 CMP_(y, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xCC: { // CPY ABS
-                uint8_t t = ram[absolute()];
+                uint8_t t = memory_read(absolute());
                 CMP_(y, t);
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
 
             case 0xC6: { // DEC ZPG
                 ram[zero_page()]--;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xD6: { // DEC ZPG,X
                 ram[zero_page_indexed(x)]--;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xCE: { // DEC ABS
-                ram[absolute()]--;
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
+                t--;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
             case 0xDE: { // DEC ABS,X
-                ram[absolute_indexed(x)]--;
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
+                t--;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
 
             case 0xE6: { // INC ZPG
                 ram[zero_page()]++;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xF6: { // INC ZPG,X
                 ram[zero_page_indexed(x)]++;
-                SAVE_FLAG_REGISTER();
+                UPDATE_FLAG_REGISTER();
                 break;
             }
 
             case 0xEE: { // INC ABS
-                ram[absolute()]++;
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute();
+                uint8_t t = memory_read(addr);
+                t++;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
             case 0xFE: { // INC ABS,X
-                ram[absolute_indexed(x)]++;
-                SAVE_FLAG_REGISTER();
+                uint16_t addr = absolute_indexed(x);
+                uint8_t t = memory_read(addr);
+                t++;
+                UPDATE_FLAG_REGISTER();
+                memory_write(addr, t);
                 break;
             }
 
@@ -941,31 +1017,36 @@ int main() {
             }
 
             case 0xAD: { // LDA ABS
-                a = ram[absolute()];
+                uint16_t addr = absolute();
+                a = memory_read(addr);
                 set_flags_on_load(a);
                 break;
             }
 
             case 0xBD: { // LDA ABS,X
-                a = ram[absolute_indexed(x)];
+                uint16_t addr = absolute_indexed(x);
+                a = memory_read(addr);
                 set_flags_on_load(a);
                 break;
             }
 
             case 0xB9: { // LDA ABS,Y
-                a = ram[absolute_indexed(y)];
+                uint16_t addr = absolute_indexed(y);
+                a = memory_read(addr);
                 set_flags_on_load(a);
                 break;
             }
 
             case 0xA1: { // LDA (IMM,X)
-                a = ram[indexed_indirect()];
+                uint16_t addr = indexed_indirect();
+                a = memory_read(addr);
                 set_flags_on_load(a);
                 break;
             }
 
             case 0xB1: { // LDA (IMM),Y
-                a = ram[indirect_indexed()];
+                uint16_t addr = indirect_indexed();
+                a = memory_read(addr);
                 set_flags_on_load(a);
                 break;
             }
@@ -990,13 +1071,15 @@ int main() {
             }
 
             case 0xAE: { // LDX ABS
-                x = ram[absolute()];
+                uint16_t addr = absolute();
+                x = memory_read(addr);
                 set_flags_on_load(x);
                 break;
             }
 
             case 0xBE: { // LDX ABS,Y
-                x = ram[absolute_indexed(y)];
+                uint16_t addr = absolute_indexed(y);
+                x = memory_read(addr);
                 set_flags_on_load(x);
                 break;
             }
@@ -1021,13 +1104,15 @@ int main() {
             }
 
             case 0xAC: { // LDY ABS
-                y = ram[absolute()];
+                uint16_t addr = absolute();
+                y = memory_read(addr);
                 set_flags_on_load(y);
                 break;
             }
 
             case 0xBC: { // LDY ABS,X
-                y = ram[absolute_indexed(x)];
+                uint16_t addr = absolute_indexed(x);
+                y = memory_read(addr);
                 set_flags_on_load(y);
                 break;
             }
@@ -1044,27 +1129,27 @@ int main() {
             }
 
             case 0x8D: { // STA ABS
-                ram[absolute()] = a;
+                memory_write(absolute(), a);
                 break;
             }
 
             case 0x9D: { // STA ABS,X
-                ram[absolute_indexed(x)] = a;
+                memory_write(absolute_indexed(x), a);
                 break;
             }
 
             case 0x99: { // STA ABS,Y
-                ram[absolute_indexed(y)] = a;
+                memory_write(absolute_indexed(y), a);
                 break;
             }
 
             case 0x81: { // STA (IMM,X)
-                 ram[indexed_indirect()] = a;
+                memory_write(indexed_indirect(), a);
                 break;
             }
 
             case 0x91: { // STA (IMM),Y
-                ram[indirect_indexed()] = a;
+                memory_write(indirect_indexed(), a);
                 break;
             }
 
@@ -1080,7 +1165,7 @@ int main() {
             }
 
             case 0x8E: { // STX ABS
-                ram[absolute()] = x;
+                memory_write(absolute(), x);
                 break;
             }
 
@@ -1096,7 +1181,7 @@ int main() {
             }
 
             case 0x8C: { // STY ABS
-                ram[absolute()] = y;
+                memory_write(absolute(), y);
                 break;
             }
 
