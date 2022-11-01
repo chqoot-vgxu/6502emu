@@ -12,14 +12,62 @@ Why not?
 ## Status
 I didn't test this on anything but an atmega328p.
 
-All but 2 instructions are implemented.
+All but 2 instructions (SED and CLD) are implemented.
 
-Interrupts not implemented yet.
+Interrupts are on their way, BK is working already.
 
 BCD mode not implemented and probably never will.
 
-The missing instructions are
- * BRK
- * SED
+## Some technical stuff
+### Address space
+```
+  6502                 atmega328p
+0xffff  +-----------+  wherever gcc puts rom + rom size (8k in this example)
+        |  ROM_END  |
+        |           |
+        |           |
+0xe000  | ROM_START |
+0xdfff  +-----------+  wherever gcc puts rom
+0x0900  | RESERVED1 |
+0x08ff  +-----------+  0x00ff
+        |  REG_END  |
+        |           |
+0x0800  | REG_START |  0x0000
+0x07ff  +-----------+  0x08ff
+0x07f0  | RESERVED0 |  0x08f0
+0x07ef  +-----------+  0x08ef
+        |  RAM_END  |
+        |           |
+        | RAM_START |
+0x0000  +-----------+  0x0100
+```
 
-Furthermore some things are practicaly impossible to emulate, for example the 6502 interrupt vector. At reset the 6502 would read the address where to start executing code from 0xFFFC-D, but the atmega328p doesn't have this much flash memory. So it starts executing from whenever the compiler places it. Same story for IRQ/BRK and NMI vectors.
+Not all the internal ram is accessible because some functions and IRQs do use some stack space.
+This should be less than 16 bytes though, and is the region marked as RESERVED0.
+
+RESERVED1 on the other hand is an empty region, no memory is present and read or writes are redirected to
+the REG region. This region could be used to map emulated peripherals, such as a math coprocessor, to
+speed up operation like multiplication and division on integer and floating point numbers, or
+a video chip to drive an external display more efficiently.
+
+Read to reserved regions will always return 0, writes are silently ignored.
+
+Care should be taken when writing to registers as some of them are used by the emulator to work properly.
+For example addresses $0800-$0820, $083d-$08ef should not be written as they contain the avr architectural registers r0-r31
+the avr stack pointer and status register.
+
+
+### Interrupts (WIP)
+Not yet working, the following are just ideas on how to handle them.
+
+#### NMI
+The Non Maskable Interrupt is triggered by a falling edge on INT0.
+
+#### IRQ/BRK
+All other AVR interrupts write To the GPIOR registers and will be checked after each instruction completes.
+To clear the interrupt the appropriate flag in te GPIOR registers must be cleared.
+
+#### RESET
+The only way to reset the emulator is to reset the host.
+The ram content won't change between resets but all peripherals are reset and must be reinitialized.
+An alternative would be to use an indirect jump to jump to the reset vector.
