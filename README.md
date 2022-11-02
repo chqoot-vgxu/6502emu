@@ -58,7 +58,7 @@ the avr stack pointer and status register.
 
 
 ### Interrupts (WIP)
-Not yet working, the following are just ideas on how to handle them.
+Not fully tested but seems to be working.
 
 #### NMI
 The Non Maskable Interrupt is triggered by a falling edge on INT0.
