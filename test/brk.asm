@@ -1,17 +1,14 @@
 
-DELAY  = $0200 ; 2 bytes
-
 ; baud 115200
 BAUDRATE_L = $10
 BAUDRATE_H = $00
 
-    .org $ff80
+    .org $ff40
     .include "registers.asm"
 
 reset:
-    ldx #$00
+    ldx #$ff
     txs
-main:
     lda #BAUDRATE_L
     ldx #BAUDRATE_H
     jsr uart_init
@@ -20,29 +17,23 @@ main:
 loop:
     lda #(1 << PB5)
     sta PINB
-
-    ldy #$00
-tx_next:
-    lda hello_world,y
-    jsr uart_tx
-    iny
-    cmp #$00
-    bne tx_next
+    brk
+    nop
     lda #$FF
-    sta DELAY
-    sta DELAY+1
+    sta R0
+    sta R1
     jsr delay
     jmp loop
 
 delay:
-    lda DELAY
+    lda R0
     bne label$
-    lda DELAY+1
+    lda R1
     beq end$
-    dec DELAY+1
+    dec R1
 label$:
-    dec DELAY
-    jmp delay
+    dec R0
+    bra delay
 end$:
     rts
 
@@ -58,19 +49,31 @@ uart_init:
     rts
 
 uart_tx:
-    pha
-wait$:
     lda #(1 << UDRE0)
     bit UCSR0A
-    beq wait$
-    pla
+    beq uart_tx
+    lda R0
     sta UDR0
     rts
 
 hello_world:
-    .byte "Hello, world!", $0a, $00
+    .byte "Hello, world!\n\0"
 
+irq:
+    phy
+    ldy #$00
+tx_next:
+    lda hello_world,y
+    sta R0
+    jsr uart_tx
+    iny
+    cmp #$00
+    bne tx_next
+    ply
+    rti
+
+    ;Setup interrupt table
     .org $fffa
-    .word reset
-    .word reset
-    .word reset
+    .word rst	;Non-maskable interrupt vector
+    .word rst	;Reset interrupt vector
+    .word irq	;Interrupt request vector

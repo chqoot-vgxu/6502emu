@@ -3,3 +3,6 @@
 *.elf
 *.bin
 *.out
+
+build
+__pycache__

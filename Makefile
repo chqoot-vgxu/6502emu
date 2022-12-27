@@ -1,16 +1,35 @@
 # TODO: learn to write makefiles
 
-debug:
-	@avr-gcc -O0 -g -Wall -Wextra -Wconversion -Wno-unused-parameter -mmcu=atmega328p main.cpp -o maind.elf
+CC := avr-gcc
+CFLAGS := -Os -Wall -Wextra -Wno-array-bounds -Wno-unused-parameter -mmcu=atmega328p -mrelax -fdata-sections -ffunction-sections -Wl,--gc-sections
 
-simavr: debug
-	@simavr -f 16000000 -m atmega328p -g -v maind.elf
+ifeq ($(MODE),debug)
+	CFLAGS += -Og -g
+	BUILD_DIR := build/debug
+else
+	MODE := release
+	CFLAGS += -Os
+	BUILD_DIR := build/release
+endif
 
-release:
-	@avr-gcc -Os -Wall -Wextra -Wconversion -Wno-unused-parameter -mmcu=atmega328p main.cpp -o main.elf
+SOURCE_DIR := .
+BUILD_DIR  := build
 
-upload: release
-	@avrdude -c arduino -p atmega328p -P /dev/ttyACM0 -b 115200 -D -U flash:w:main.elf -v
+SOURCES := $(wildcard *.c)
+OBJECTS := $(addprefix $(BUILD_DIR)/$(MODE)/, $(notdir $(SOURCES:.c=.o)))
+
+6502emu: $(OBJECTS)
+	@ mkdir -p build
+	$(CC) $(CFLAGS) $^ -o $@.elf
+
+$(BUILD_DIR)/$(MODE)/%.o: $(SOURCE_DIR)/%.c
+	@ mkdir -p $(BUILD_DIR)/$(MODE)
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+upload: 6502emu
+	avrdude -c arduino -p atmega328p -P /dev/ttyACM0 -b 115200 -D -U flash:w:6502emu.elf -v
 
 clean:
-	rm main.elf maind.elf
+	-rm -r $(BUILD_DIR) *.elf
+
+.PHONY: 6502emu upload clean
