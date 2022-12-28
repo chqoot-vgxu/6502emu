@@ -8,8 +8,8 @@ def main(bin_name: str):
         print(f"The file {bin_name} doesn't exists", file=sys.stderr)
         return 1
 
-    header_name = os.path.splitext(bin_name)[0] + '.h'
-    source_name = os.path.splitext(bin_name)[0] + '.c'
+    header_name = 'rom.h'
+    source_name = 'rom.c'
 
     bin_stat = os.stat(bin_name)
 
