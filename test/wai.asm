@@ -12,13 +12,13 @@ rst:
     sta TIMSK1
     lda #(1 << PB5)
     sei
-loop$:
+loop:
     wai
+    bit TIMER1_OVF_clear
     sta PINB
-    bit $090c   ; clear interrupt
-    bra loop$
+    bra loop
 
-    ;Setup interrupt table
+;Setup interrupt table
     .org $fffa
     .word rst	;Non-maskable interrupt vector
     .word rst	;Reset interrupt vector

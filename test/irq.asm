@@ -16,10 +16,10 @@ loop:
     bra loop
 
 irq:
+    bit TIMER1_OVF_clear
     pha
     lda #(1 << PB5)
     sta PINB
-    bit TIMER1_OVF_vect_clear
     pla
     rti
 

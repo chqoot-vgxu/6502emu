@@ -96,8 +96,8 @@ the stack pointer and status register.
 ### Interrupts (WIP)
 Not fully tested but seems to be working.
 
-Interrupts can be disabled setting ENABLE_INTERRUPTS=0. This can be useful if interrupts aren't used to reduce
-binary size and gain a small speed improvement.
+Interrupts can be disabled setting ENABLE_INTERRUPTS=0. This can be useful to reduce
+binary size and gain a small speed improvement, if interrupts aren't used.
 
 ### NMI
 The Non Maskable Interrupt is triggered by a falling edge on INT0.

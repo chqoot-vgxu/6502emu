@@ -5,8 +5,6 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 
-#include "rom.h"
-
 #ifndef ENABLE_INTERRUPTS
 #   define ENABLE_INTERRUPTS 1
 #endif

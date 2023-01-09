@@ -7,6 +7,7 @@
 #include <avr/sleep.h>
 
 #include "opcodes.h"
+#include "rom.h"
 
 #define AVR_STACK_SIZE 16
 #define AVR_REG_SIZE 256
@@ -43,8 +44,8 @@ register uint8_t  y  asm("r15");
 #define FLAG_Z 1 // Z  1
 #define FLAG_I 2 // I  different meaning
 #define FLAG_D 3 // D  no equivalent
-#define FLAG_B 4 // B  weird bit
-                 // s  other weird bit
+#define FLAG_B 4 // B  brk bit
+                 // s  weird bit
 #define FLAG_V 6 // V  3
 #define FLAG_N 7 // N  2
 
@@ -436,8 +437,13 @@ static void das() {
 
 // #endregion
 
-_opcode(nop) {}
+#if defined(UNDEFINED_ALIAS_BRK)
+_opcode(undefined) __attribute__((alias("brk")));
+#else
 _opcode(undefined) __attribute__((alias("nop")));
+#endif
+
+_opcode(nop) {}
 
 _opcode(brk) {
     INC_PC(1);
@@ -1766,12 +1772,12 @@ _opcode(rti) {
 
 #define _opcode_bbr(BIT) _opcode_bbt(bbr##BIT, BIT, !)
 #define _opcode_bbs(BIT) _opcode_bbt(bbs##BIT, BIT,  )
-#define _opcode_bbt(NAME, BIT, S)       \
+#define _opcode_bbt(NAME, BIT, TEST)    \
 _opcode(NAME) {                         \
     uint16_t addr = zero_page();        \
     uint8_t t = AVR_RAM[addr];          \
     int8_t o = (int8_t) immediate();    \
-    if (S (t & (1 << BIT))) {           \
+    if (TEST(t & (1 << BIT))) {         \
         INC_PC(o);                      \
     }                                   \
 }
@@ -1831,9 +1837,7 @@ _opcode(sed) {
 
 _opcode(stp) {
     cli();
-    while (1) {
-        sleep_mode();
-    }
+    sleep_mode();
 }
 
 _opcode(wai) {

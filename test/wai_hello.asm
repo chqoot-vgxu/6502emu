@@ -14,35 +14,28 @@ rst:
     sta UBRR0H
     lda #(1 << U2X0)
     sta UCSR0A
-    lda #(1 << TXEN0)
+    lda #(1 << TXEN0) | (1 << UDRIE0)
     sta UCSR0B
     lda #(1 << USBS0) | (3 << UCSZ00)
     sta UCSR0C
+    sei
     ldy #$00
 tx_next:
     lda hello_world,y
     beq exit
+    sta UDR0
     iny
-    jsr uart_tx
+    wai
+    bit USART_UDRE_clear
     bra tx_next
 exit:
     stp
 
-uart_tx:
-    pha
-    lda #(1 << UDRE0)
-wait$:
-    bit UCSR0A
-    beq wait$
-    pla
-    sta UDR0
-    rts
-
 hello_world:
     .byte "Hello, world!\n\0"
 
-    ;Setup interrupt table
-    .org $fffa
-    .word rst	;Non-maskable interrupt vector
-    .word rst	;Reset interrupt vector
-    .word rst	;Interrupt request vector
+;Setup interrupt table
+    org $fffa
+    word rst	;Non-maskable interrupt vector
+    word rst	;Reset interrupt vector
+    word rst	;Interrupt request vector
