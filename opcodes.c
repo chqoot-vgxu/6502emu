@@ -24,7 +24,7 @@
 typedef __uint24 uint24_t;
 
 register uint24_t iv asm("r6");
-register uint8_t  s asm("r9");
+register uint8_t  s  asm("r9");
 register uint16_t pc asm("r10");
 register uint8_t  a  asm("r12");
 register flags_t  p  asm("r13");
@@ -766,19 +766,23 @@ _opcode(inc_zpg_x) {
     _update_flags_NZ();
 }
 
+#define asm_inc(V) asm(         \
+    "subi %[v],-1"      "\n\t"  \
+    "call _update_flags_NZ"     \
+    : [v]"+r"(V)                \
+);
+
 _opcode(inc_abs) {
     uint16_t addr = absolute();
     uint8_t t = memory_read(addr);
-    t++;
-    _update_flags_NZ();
+    asm_inc(t);
     memory_write(addr, t);
 }
 
 _opcode(inc_abs_x) {
     uint16_t addr = absolute_indexed_x();
     uint8_t t = memory_read(addr);
-    t++;
-    _update_flags_NZ();
+    asm_inc(t);
     memory_write(addr, t);
 }
 
@@ -799,19 +803,23 @@ _opcode(dec_zpg_x) {
     _update_flags_NZ();
 }
 
+#define asm_sub(V) asm(         \
+    "subi %[v],1"       "\n\t"  \
+    "call _update_flags_NZ"     \
+    : [v]"+r"(V)                \
+);
+
 _opcode(dec_abs) {
     uint16_t addr = absolute();
     uint8_t t = memory_read(addr);
-    t--;
-    _update_flags_NZ();
+    asm_sub(t);
     memory_write(addr, t);
 }
 
 _opcode(dec_abs_x) {
     uint16_t addr = absolute_indexed_x();
     uint8_t t = memory_read(addr);
-    t--;
-    _update_flags_NZ();
+    asm_sub(t);
     memory_write(addr, t);
 }
 
