@@ -8,8 +8,9 @@ def main(bin_name: str):
         print(f"The file {bin_name} doesn't exists", file=sys.stderr)
         return 1
 
-    header_name = 'rom.h'
-    source_name = 'rom.c'
+    gen_dir_name = os.path.join('build', 'generated') 
+    header_name = os.path.join(gen_dir_name, 'rom.h')
+    source_name = os.path.join(gen_dir_name, 'rom.c')
 
     bin_stat = os.stat(bin_name)
 
@@ -28,7 +29,8 @@ def main(bin_name: str):
 
             source.write(f"""\
 /* GENERATED FROM '{bin_name}' */
-#include "{header_name}"
+#include "rom.h"
+#include <avr/pgmspace.h>
 
 const uint8_t PROGMEM rom[ROM_SIZE] = {{
 /*          0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F                        */
@@ -47,10 +49,9 @@ const uint8_t PROGMEM rom[ROM_SIZE] = {{
 #pragma once
 
 #include <stdint.h>
-#include <avr/pgmspace.h>
 
 #define ROM_SIZE {size}
-extern const uint8_t PROGMEM rom[ROM_SIZE];
+extern const uint8_t rom[ROM_SIZE];
 """)
 
 
