@@ -268,12 +268,40 @@ opcode_t read_next_opcode() {
 #define _opcode(name) static void (name)()
 
 // #region helpers
-static void _update_flags_NVZC() {
+static void _update_flags_abc() {
     uint8_t sreg = SREG;
     asm volatile (
         "mov  r25,%[p]"             "\n\t"
         "cbr  r25,%[cleared_flags]" "\n\t"
         "sbrc %[sreg],%[sreg_c]"    "\n\t"
+        "sbr  r25,1 << %[flag_c]"   "\n\t"
+        "sbrc %[sreg],%[sreg_z]"    "\n\t"
+        "sbr  r25,1 << %[flag_z]"   "\n\t"
+        "sbrc %[sreg],%[sreg_v]"    "\n\t"
+        "sbr  r25,1 << %[flag_v]"   "\n\t"
+        "sbrc %[sreg],%[sreg_n]"    "\n\t"
+        "sbr  r25,1 << %[flag_n]"   "\n\t"
+        "mov  %[p],r25"
+        : [p]"+l"(p)
+        : [sreg]"r"(sreg),
+          [sreg_c]"M"(SREG_C),
+          [sreg_z]"M"(SREG_Z),
+          [sreg_v]"M"(SREG_V),
+          [sreg_n]"M"(SREG_N),
+          [cleared_flags]"M"((1 << FLAG_N) | (1 << FLAG_V) | (1 << FLAG_Z) | (1 << FLAG_C)),
+          [flag_c]"M"(FLAG_C),
+          [flag_z]"M"(FLAG_Z),
+          [flag_v]"M"(FLAG_V),
+          [flag_n]"M"(FLAG_N)
+    );
+}
+
+static void _update_flags_sbc() {
+    uint8_t sreg = SREG;
+    asm volatile (
+        "mov  r25,%[p]"             "\n\t"
+        "cbr  r25,%[cleared_flags]" "\n\t"
+        "sbrs %[sreg],%[sreg_c]"    "\n\t"
         "sbr  r25,1 << %[flag_c]"   "\n\t"
         "sbrc %[sreg],%[sreg_z]"    "\n\t"
         "sbr  r25,1 << %[flag_z]"   "\n\t"
@@ -431,7 +459,7 @@ static void op_adc(uint8_t v) {
     if (FLAG_IS_SET(D)) {
         daa();
     }
-    _update_flags_NVZC();
+    _update_flags_abc();
 }
 
 _opcode(adc_imm) {
@@ -504,7 +532,7 @@ static void op_sbc(uint8_t v) {
     if (FLAG_IS_SET(D)) {
         das();
     }
-    _update_flags_NVZC();
+    _update_flags_sbc();
 }
 
 _opcode(sbc_imm) {
